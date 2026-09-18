@@ -29,9 +29,14 @@ from app.modules.events.service import FACILITY_ATTRS, calculate_match, create_e
 
 router = APIRouter(tags=["events"])
 
+_VALID_FACILITY_VALUES = (0.0, 0.5, 1.0)
+
+# Query strings are always text ("1", "0.5"); pydantic's Literal[0, 0.5, 1]
+# does not reliably coerce that text against a mixed int/float literal set,
+# so the param is typed as a plain float and validated manually below.
 FacilityScoreParam = Annotated[
-    Literal[0, 0.5, 1] | None,
-    Query(description="Require this exact claim value for the attribute"),
+    float | None,
+    Query(description="Require this exact claim value for the attribute (0, 0.5, or 1)"),
 ]
 
 _ALLOWED_LIST_QUERY_KEYS = {
@@ -104,6 +109,14 @@ def get_events(
         "rest_area": rest_area,
         "parking_or_dropoff": parking_or_dropoff,
     }
+    for attr, value in facility_values.items():
+        if value is not None and value not in _VALID_FACILITY_VALUES:
+            raise APIError(
+                422,
+                "VALIDATION_ERROR",
+                f"{attr} harus salah satu dari 0, 0.5, atau 1",
+            )
+
     facility_filters = {
         attr: Decimal(str(value))
         for attr, value in facility_values.items()
