@@ -14,6 +14,17 @@ from app.modules.users.models import User
 DEMO_USER_IDS = {"attendee": "u-att-1", "organizer": "u-org-1"}
 
 
+def _build_user_response(user: User, session: Session) -> UserResponse:
+    organizer_id = None
+    if user.role == "organizer":
+        organizer_id = session.scalar(
+            select(Organizer.id).where(Organizer.owner_user_id == user.id)
+        )
+    return UserResponse(
+        id=user.id, name=user.display_name, role=user.role, organizer_id=organizer_id
+    )
+
+
 def demo_login(account: str, session: Session) -> TokenResponse:
     if not get_settings().enable_demo_login:
         raise APIError(403, "DEMO_LOGIN_DISABLED", "Demo login tidak aktif")
@@ -22,7 +33,7 @@ def demo_login(account: str, session: Session) -> TokenResponse:
         raise APIError(503, "DEMO_DATA_MISSING", "Akun demo belum tersedia")
     return TokenResponse(
         token=create_access_token(user.id, user.role),
-        user=UserResponse(id=user.id, name=user.display_name, role=user.role),
+        user=_build_user_response(user, session),
     )
 
 
@@ -52,7 +63,7 @@ def register_user(payload: RegisterRequest, session: Session) -> TokenResponse:
 
     return TokenResponse(
         token=create_access_token(user.id, user.role),
-        user=UserResponse(id=user.id, name=user.display_name, role=user.role),
+        user=_build_user_response(user, session),
     )
 
 
@@ -69,5 +80,5 @@ def login_user(payload: LoginRequest, session: Session) -> TokenResponse:
 
     return TokenResponse(
         token=create_access_token(user.id, user.role),
-        user=UserResponse(id=user.id, name=user.display_name, role=user.role),
+        user=_build_user_response(user, session),
     )

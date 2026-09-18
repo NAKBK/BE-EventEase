@@ -14,6 +14,12 @@ class UserResponse(BaseModel):
     id: str
     name: str
     role: Literal["attendee", "organizer"]
+    organizer_id: str | None = Field(
+        default=None,
+        description="Organizer profile id; present only when role == 'organizer'. "
+        "Use this (not id) to call /api/organizers/{organizer_id} or to publish "
+        "events as this account.",
+    )
 
 
 class TokenResponse(BaseModel):

@@ -21,6 +21,7 @@ def test_register_then_login(seeded_database):
         assert register_response.status_code == 201
         body = register_response.json()
         assert body["user"]["role"] == "attendee"
+        assert body["user"]["organizer_id"] is None
         assert isinstance(body["token"], str)
 
         with get_session_factory()() as session:
@@ -36,6 +37,39 @@ def test_register_then_login(seeded_database):
         )
         assert login_response.status_code == 200
         assert login_response.json()["user"]["id"] == body["user"]["id"]
+
+
+def test_organizer_register_and_login_include_organizer_id(seeded_database):
+    from app.main import create_app
+    from app.modules.organizers.models import Organizer
+
+    with TestClient(create_app()) as client:
+        register_response = client.post(
+            "/api/auth/register",
+            json={
+                "email": "new-organizer@example.com",
+                "password": "correct-horse",
+                "name": "New Organizer",
+                "role": "organizer",
+            },
+        )
+        assert register_response.status_code == 201
+        body = register_response.json()
+        assert body["user"]["role"] == "organizer"
+        organizer_id = body["user"]["organizer_id"]
+        assert organizer_id is not None
+
+        with get_session_factory()() as session:
+            organizer = session.get(Organizer, organizer_id)
+            assert organizer is not None
+            assert organizer.owner_user_id == body["user"]["id"]
+
+        login_response = client.post(
+            "/api/auth/login",
+            json={"email": "new-organizer@example.com", "password": "correct-horse"},
+        )
+        assert login_response.status_code == 200
+        assert login_response.json()["user"]["organizer_id"] == organizer_id
 
 
 def test_register_duplicate_email_rejected(seeded_database):

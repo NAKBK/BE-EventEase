@@ -37,15 +37,16 @@ def test_demo_login_contract_and_bearer_rejection(seeded_database):
         return {"id": user.id, "role": user.role}
 
     with TestClient(app) as client:
-        for account, expected_id in (
-            ("attendee", "u-att-1"),
-            ("organizer", "u-org-1"),
+        for account, expected_id, expected_organizer_id in (
+            ("attendee", "u-att-1", None),
+            ("organizer", "u-org-1", "org-1"),
         ):
             response = client.post("/api/auth/demo-login", json={"account": account})
             assert response.status_code == 200
             body = response.json()
             assert body["user"]["id"] == expected_id
             assert body["user"]["role"] == account
+            assert body["user"]["organizer_id"] == expected_organizer_id
             assert isinstance(body["token"], str)
             authorized = client.get(
                 "/_test/protected",
