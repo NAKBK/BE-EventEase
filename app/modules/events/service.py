@@ -310,23 +310,20 @@ def get_event(event_id: str, session: Session) -> EventDetail:
     return _build_detail(event, session)
 
 
-def calculate_match(user_id: str, event_id: str, session: Session) -> MatchResponse:
-    profile = session.get(NeedProfile, user_id)
-    if profile is None:
-        raise APIError(
-            409,
-            "NEED_PROFILE_MISSING",
-            "Harap isi profil kebutuhan aksesibilitas terlebih dahulu",
-        )
+def _compute_match(
+    profile: NeedProfile, claim: AccessibilityClaim | None
+) -> tuple[int, list[MatchBreakdown], list[str], str]:
+    """
+    Pure scoring function shared by BE-API-006 (GET .../match) and BE-API-018
+    (sort=match_score). Do not duplicate this logic elsewhere — BE-API-018's
+    contract explicitly requires reusing this exact formula, not a separate
+    calculation, so the two endpoints can never silently drift apart.
 
-    event = session.get(Event, event_id)
-    if event is None:
-        raise APIError(404, "EVENT_NOT_FOUND", "Event tidak ditemukan")
-
-    claim = session.get(AccessibilityClaim, event_id)
-    if claim is None:
-        raise APIError(404, "CLAIM_NOT_FOUND", "Data aksesibilitas belum tersedia")
-
+    claim=None is treated as if every attribute were unknown (score 0 for
+    the numerator, weight still counted in the denominator) rather than
+    raising — list-sorting must never 500 on a data-integrity edge case
+    that a single-event lookup would reject outright.
+    """
     facility_attrs = [
         "step_free_entrance",
         "elevator_or_ramp",
@@ -344,7 +341,7 @@ def calculate_match(user_id: str, event_id: str, session: Session) -> MatchRespo
         is_required = getattr(profile, attr)
         coeff = 2.0 if is_required else 0.25
 
-        claim_val = getattr(claim, attr)
+        claim_val = getattr(claim, attr) if claim is not None else None
         if claim_val is None:
             fulfillment = None
             unknowns.append(attr)
@@ -378,7 +375,7 @@ def calculate_match(user_id: str, event_id: str, session: Session) -> MatchRespo
         coeff = 0.25
     total_coeff += coeff
 
-    claim_dist = claim.walking_distance_m
+    claim_dist = claim.walking_distance_m if claim is not None else None
     if claim_dist is None:
         fulfillment = None
         unknowns.append("walking_distance")
@@ -429,11 +426,33 @@ def calculate_match(user_id: str, event_id: str, session: Session) -> MatchRespo
     if unknowns:
         summary = "Some required information is unknown; contact the organizer."
 
+    return final_score, breakdowns, unknowns, summary
+
+
+def calculate_match(user_id: str, event_id: str, session: Session) -> MatchResponse:
+    profile = session.get(NeedProfile, user_id)
+    if profile is None:
+        raise APIError(
+            409,
+            "NEED_PROFILE_MISSING",
+            "Harap isi profil kebutuhan aksesibilitas terlebih dahulu",
+        )
+
+    event = session.get(Event, event_id)
+    if event is None:
+        raise APIError(404, "EVENT_NOT_FOUND", "Event tidak ditemukan")
+
+    claim = session.get(AccessibilityClaim, event_id)
+    if claim is None:
+        raise APIError(404, "CLAIM_NOT_FOUND", "Data aksesibilitas belum tersedia")
+
+    score, breakdown, unknowns, summary = _compute_match(profile, claim)
+
     return MatchResponse(
         event_id=event_id,
-        score=final_score,
+        score=score,
         weight_version="provisional-v1",
-        breakdown=breakdowns,
+        breakdown=breakdown,
         unknown_attributes=unknowns,
         summary=summary,
     )
