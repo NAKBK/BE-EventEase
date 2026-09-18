@@ -201,6 +201,14 @@ class EventCreate(BaseModel):
     venue: VenueCreate
     claim: ClaimInput
 
+    @field_validator("starts_at", "ends_at", mode="before")
+    @classmethod
+    def ensure_timezone_aware(cls, v):
+        """Ensure datetime fields are timezone-aware as per API contract (ISO 8601 with timezone)."""
+        if isinstance(v, datetime) and v.tzinfo is None:
+            raise ValueError("DateTime must include timezone information (ISO 8601 format)")
+        return v
+
     @model_validator(mode="after")
     def ends_after_starts(self) -> "EventCreate":
         if self.ends_at <= self.starts_at:
