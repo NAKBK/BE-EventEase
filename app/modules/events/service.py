@@ -13,7 +13,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.errors import APIError
-from app.modules.events.models import AccessibilityClaim, Event
+from app.modules.events.models import AccessibilityClaim, Event, EventMedia
 from app.modules.events.schemas import (
     ClaimBody,
     ClaimInput,
@@ -23,6 +23,7 @@ from app.modules.events.schemas import (
     EventListResponse,
     MatchBreakdown,
     MatchResponse,
+    MediaItem,
     OrganizerEmbed,
     VenueEmbed,
 )
@@ -125,11 +126,14 @@ def _require_organizer_by_user(user_id: str, session: Session) -> Organizer:
 
 
 def _build_venue_embed(venue: Venue) -> VenueEmbed:
+    # Venue model stores latitude/longitude; API contract uses lat/lng.
     return VenueEmbed(
         id=venue.id,
         name=venue.name,
         city=venue.city,
         address=venue.address,
+        lat=venue.latitude,
+        lng=venue.longitude,
     )
 
 
@@ -142,6 +146,12 @@ def _build_detail(event: Event, session: Session) -> EventDetail:
     if organizer is None:
         raise APIError(500, "DATA_INTEGRITY_ERROR", f"Organizer untuk event '{event.id}' tidak ditemukan")
 
+    media_rows = session.scalars(
+        select(EventMedia)
+        .where(EventMedia.event_id == event.id)
+        .order_by(EventMedia.uploaded_at.asc())
+    ).all()
+
     return EventDetail(
         id=event.id,
         title=event.title,
@@ -152,6 +162,7 @@ def _build_detail(event: Event, session: Session) -> EventDetail:
         venue=_build_venue_embed(venue),
         organizer=_organizer_embed(organizer, session),
         claim=ClaimBody.model_validate(claim) if claim else None,
+        media=[MediaItem.model_validate(m) for m in media_rows],
     )
 
 
@@ -167,12 +178,7 @@ def _build_list_item(event: Event, session: Session) -> EventListItem:
         title=event.title,
         starts_at=event.starts_at,
         status=event.status,  # type: ignore[arg-type]
-        venue=VenueEmbed(
-            id=venue.id,
-            name=venue.name,
-            city=venue.city,
-            address=venue.address,
-        ),
+        venue=_build_venue_embed(venue),
         organizer=_organizer_embed(organizer, session),
     )
 
@@ -202,10 +208,13 @@ def create_event(payload: EventCreate, user_id: str, session: Session) -> EventD
         name=payload.venue.name,
         city=payload.venue.city,
         address=payload.venue.address,
+        latitude=payload.venue.lat,    # VenueCreate uses lat/lng; model uses latitude/longitude
+        longitude=payload.venue.lng,
         source="organizer",
         checked_at=now,
     )
     session.add(venue)
+    session.flush()  # write venue to DB so event FK resolves
 
     event = Event(
         id=event_id,
@@ -219,6 +228,7 @@ def create_event(payload: EventCreate, user_id: str, session: Session) -> EventD
         published_at=now,
     )
     session.add(event)
+    session.flush()  # write event to DB so accessibility_claims FK resolves
 
     claim = AccessibilityClaim(
         event_id=event_id,

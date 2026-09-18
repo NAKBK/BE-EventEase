@@ -64,3 +64,26 @@ class AccessibilityClaim(Base):
     walking_distance_m: Mapped[int | None] = mapped_column(Integer)
     source: Mapped[str] = mapped_column(String(30), nullable=False)
     checked_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class EventMedia(Base):
+    """
+    Photo evidence attached to an event's accessibility claim (BE-009 / BE-API-017).
+    url points to Supabase Storage public URL; never stores raw bytes.
+    uploader_id is the organizer user who uploaded the file.
+    """
+
+    __tablename__ = "event_media"
+    __table_args__ = (
+        Index("ix_event_media_event", "event_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    event_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("events.id", ondelete="CASCADE"), nullable=False
+    )
+    uploader_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    )
+    url: Mapped[str] = mapped_column(String(1024), nullable=False)
+    uploaded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

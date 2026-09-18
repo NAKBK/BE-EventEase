@@ -8,6 +8,7 @@ from app.core.database import get_engine
 from app.core.errors import register_error_handlers
 from app.modules.auth.controller import router as auth_router
 from app.modules.events.controller import router as events_router
+from app.modules.events.media_controller import router as media_router
 from app.modules.users.controller import router as needs_router
 
 
@@ -20,10 +21,11 @@ def create_app() -> FastAPI:
         allow_origins=settings.cors_origins,
         allow_credentials=False,
         allow_methods=["GET", "POST", "PUT"],
-        allow_headers=["Authorization", "Content-Type"],
+        allow_headers=["Authorization", "Content-Type", "Accept"],
     )
     app.include_router(auth_router, prefix="/api/auth")
     app.include_router(events_router, prefix="/api/events")
+    app.include_router(media_router, prefix="/api/events")
     app.include_router(needs_router, prefix="/api/me")
 
 

@@ -1,7 +1,7 @@
 """Import all model classes so Alembic sees the complete schema."""
 
 from app.modules.accessibility_requests.models import AccessibilityRequest
-from app.modules.events.models import AccessibilityClaim, Event
+from app.modules.events.models import AccessibilityClaim, Event, EventMedia
 from app.modules.organizers.models import Organizer
 from app.modules.users.models import NeedProfile, User
 from app.modules.venues.models import Venue
@@ -13,6 +13,7 @@ __all__ = [
     "Organizer",
     "Venue",
     "Event",
+    "EventMedia",
     "AccessibilityClaim",
     "AccessibilityRequest",
     "Verification",

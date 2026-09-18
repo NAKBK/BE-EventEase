@@ -4,6 +4,8 @@ Aligned to shared/API.md:
   BE-API-004  GET  /api/events             — role-scoped list with filters
   BE-API-005  GET  /api/events/{event_id}  — full event detail
   BE-API-007  POST /api/events             — organizer creates event + claim
+
+BE-003 will add GET /api/events/{event_id}/match here.
 """
 
 from typing import Annotated, Literal
@@ -15,12 +17,6 @@ from app.core.errors import APIError
 from app.modules.events.schemas import EventCreate, EventDetail, EventListResponse
 from app.modules.events.service import create_event, get_event, list_events
 
-from fastapi import APIRouter
-
-from app.core.dependencies import CurrentUser, SessionDep
-from app.core.errors import APIError
-from app.modules.events import service
-from app.modules.events.schemas import MatchResponse
 
 router = APIRouter(tags=["events"])
 
@@ -67,7 +63,7 @@ def get_event_by_id(
     current_user: CurrentUser,
 ) -> EventDetail:
     """
-    BE-API-005: Get full event detail.
+    BE-API-005: Get full event detail including venue, organizer, claim, and media.
     Requires auth (either role).
     """
     return get_event(event_id, session)
@@ -82,15 +78,7 @@ def post_event(
     """
     BE-API-007: Create a new event with inline venue and accessibility claim.
     Requires role=organizer. BE sets owner from token — body organizer_id ignored.
-    claim.source must be 'organizer'.
     """
     if current_user.role != "organizer":
         raise APIError(403, "FORBIDDEN", "Hanya organizer yang dapat membuat event")
     return create_event(payload, current_user.id, session)
-@router.get("/events/{event_id}/match", response_model=MatchResponse)
-def get_event_match(
-    event_id: str, session: SessionDep, user: CurrentUser
-) -> MatchResponse:
-    if user.role != "attendee":
-        raise APIError(403, "FORBIDDEN", "Hanya attendee yang dapat mengecek kecocokan")
-    return service.calculate_match(user.id, event_id, session)
