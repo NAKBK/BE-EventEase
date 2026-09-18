@@ -1,0 +1,35 @@
+name: EventEase BE CI
+
+on:
+  push:
+    branches: [ "main", "master", "feature/*" ]
+  pull_request:
+    branches: [ "main", "master" ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up Python 3.12
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.12"
+        cache: "pip"
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+
+    - name: Run Pytest Suite
+      env:
+        DATABASE_URL: "sqlite:///./test_ci.db"
+        JWT_SECRET: "ci-test-secret-at-least-32-characters-long"
+        ENABLE_DEMO_LOGIN: "true"
+        SEED_DEMO_DATA: "true"
+      run: |
+        pytest -v
