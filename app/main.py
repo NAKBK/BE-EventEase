@@ -20,6 +20,7 @@ from app.modules.users.controller import router as needs_router
 from app.modules.accessibility_requests.controller import router as requests_router
 from app.modules.organizers.controller import router as organizers_router
 from app.modules.verification.controller import router as verification_router
+from app.modules.dashboard.controller import router as dashboard_router
 
 
 def create_app() -> FastAPI:
@@ -38,6 +39,7 @@ def create_app() -> FastAPI:
     if media_router is not None:
         app.include_router(media_router, prefix="/api/events")
     app.include_router(needs_router, prefix="/api/me")
+    app.include_router(dashboard_router, prefix="/api/me")
     app.include_router(requests_router, prefix="/api")
     app.include_router(organizers_router, prefix="/api/organizers")
     app.include_router(verification_router, prefix="/api")
