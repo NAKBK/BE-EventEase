@@ -88,6 +88,42 @@ def test_non_owner_organizer_upload_is_forbidden(seeded_database):
         assert response.json()["error"]["code"] == "FORBIDDEN"
 
 
+def test_attendee_upload_is_forbidden(seeded_database):
+    with TestClient(create_app()) as client:
+        token = token_for(client, "attendee")
+        response = client.post(
+            "/api/events/evt-upcoming-1/media",
+            headers=auth_header(token),
+            files={"file": ("evidence.jpg", b"image bytes", "image/jpeg")},
+        )
+        assert response.status_code == 403
+        assert response.json()["error"]["code"] == "FORBIDDEN"
+
+
+def test_upload_to_nonexistent_event_is_not_found(seeded_database):
+    with TestClient(create_app()) as client:
+        token = token_for(client, "organizer")
+        response = client.post(
+            "/api/events/evt-does-not-exist/media",
+            headers=auth_header(token),
+            files={"file": ("evidence.jpg", b"image bytes", "image/jpeg")},
+        )
+        assert response.status_code == 404
+        assert response.json()["error"]["code"] == "EVENT_NOT_FOUND"
+
+
+def test_upload_rejects_empty_file(seeded_database):
+    with TestClient(create_app()) as client:
+        token = token_for(client, "organizer")
+        response = client.post(
+            "/api/events/evt-upcoming-1/media",
+            headers=auth_header(token),
+            files={"file": ("evidence.jpg", b"", "image/jpeg")},
+        )
+        assert response.status_code == 422
+        assert response.json()["error"]["code"] == "VALIDATION_ERROR"
+
+
 def test_upload_rejects_wrong_content_type(seeded_database):
     with TestClient(create_app()) as client:
         token = token_for(client, "organizer")

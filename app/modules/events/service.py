@@ -31,9 +31,9 @@ from app.modules.events.schemas import (
     VenueEmbed,
 )
 from app.modules.organizers.models import Organizer
+from app.modules.organizers.service import get_organizer_reliability
 from app.modules.users.models import NeedProfile
 from app.modules.venues.models import Venue
-from app.modules.verification.models import Verification
 
 
 FACILITY_ATTRS = (
@@ -47,77 +47,20 @@ FACILITY_ATTRS = (
 
 
 # ---------------------------------------------------------------------------
-# Reliability helpers (provisional — full computation lives in BE-005)
+# Reliability helpers
 # ---------------------------------------------------------------------------
 
 def _organizer_embed(organizer: Organizer, session: Session) -> OrganizerEmbed:
+    """Build OrganizerEmbed, reusing the single reliability computation
+    (app.modules.organizers.service.get_organizer_reliability) shared with
+    the organizer profile endpoint and the verification submission response.
     """
-    Build OrganizerEmbed with provisional reliability score.
-
-    P0 rule (ARCHITECTURE.md §reliability):
-      - Map each of the seven verification answers to 1 / 0.5 / 0.
-      - Average these values across the 20 most-recent verifications for that organizer.
-      - Multiply by 100 and round → score 0–100.
-      - sample_count = number of verifications in that window (not attributes).
-      - No evidence → score:null, sample_count:0.
-    """
-    from app.modules.accessibility_requests.models import AccessibilityRequest
-
-    # Correct join path: Verification → AccessibilityRequest → Event → Organizer
-    rows = session.scalars(
-        select(Verification)
-        .join(
-            AccessibilityRequest,
-            Verification.request_id == AccessibilityRequest.id,
-        )
-        .join(Event, AccessibilityRequest.event_id == Event.id)
-        .where(Event.organizer_id == organizer.id)
-        .order_by(Verification.submitted_at.desc())
-        .limit(20)
-    ).all()
-
-    sample_count = len(rows)
-    if sample_count == 0:
-        return OrganizerEmbed(
-            id=organizer.id,
-            name=organizer.name,
-            reliability_score=None,
-            sample_count=0,
-        )
-
-    attribute_keys = [
-        "step_free_entrance",
-        "elevator_or_ramp",
-        "accessible_restroom",
-        "accessible_seating",
-        "rest_area",
-        "parking_or_dropoff",
-        "walking_distance",
-    ]
-    value_map = {"fulfilled": 1.0, "partially_fulfilled": 0.5, "not_fulfilled": 0.0}
-
-    # Average per-verification (each verification contributes one average across its 7 keys)
-    verification_averages: list[float] = []
-    for v in rows:
-        attrs: dict = v.attributes or {}
-        values = [
-            value_map[attrs[key]]
-            for key in attribute_keys
-            if attrs.get(key) in value_map
-        ]
-        if values:
-            verification_averages.append(sum(values) / len(values))
-
-    score = (
-        round(100 * sum(verification_averages) / len(verification_averages))
-        if verification_averages
-        else None
-    )
+    reliability = get_organizer_reliability(organizer.id, session)
     return OrganizerEmbed(
         id=organizer.id,
         name=organizer.name,
-        reliability_score=score,
-        sample_count=sample_count,
+        reliability_score=reliability.score,
+        sample_count=reliability.sample_count,
     )
 
 
