@@ -18,6 +18,11 @@ class Settings(BaseSettings):
     db_pool_size: int = Field(default=3, ge=1, le=20)
     db_max_overflow: int = Field(default=2, ge=0, le=20)
 
+    # Supabase Storage, used by claim evidence media upload (BE-009).
+    supabase_url: str | None = None
+    supabase_service_role_key: str | None = None
+    supabase_storage_bucket: str = "claim-evidence"
+
 
 @lru_cache
 def get_settings() -> Settings:
