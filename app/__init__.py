@@ -1,0 +1,1 @@
+"""EventEase backend application."""

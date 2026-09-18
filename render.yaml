@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: be-eventease
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /healthz
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: CORS_ORIGINS
+        sync: false
+      - key: ENABLE_DEMO_LOGIN
+        value: "true"
+      - key: SEED_DEMO_DATA
+        value: "true"
