@@ -15,6 +15,12 @@ from app.core.errors import APIError
 from app.modules.events.schemas import EventCreate, EventDetail, EventListResponse
 from app.modules.events.service import create_event, get_event, list_events
 
+from fastapi import APIRouter
+
+from app.core.dependencies import CurrentUser, SessionDep
+from app.core.errors import APIError
+from app.modules.events import service
+from app.modules.events.schemas import MatchResponse
 
 router = APIRouter(tags=["events"])
 
@@ -81,3 +87,10 @@ def post_event(
     if current_user.role != "organizer":
         raise APIError(403, "FORBIDDEN", "Hanya organizer yang dapat membuat event")
     return create_event(payload, current_user.id, session)
+@router.get("/events/{event_id}/match", response_model=MatchResponse)
+def get_event_match(
+    event_id: str, session: SessionDep, user: CurrentUser
+) -> MatchResponse:
+    if user.role != "attendee":
+        raise APIError(403, "FORBIDDEN", "Hanya attendee yang dapat mengecek kecocokan")
+    return service.calculate_match(user.id, event_id, session)

@@ -26,6 +26,7 @@ def create_app() -> FastAPI:
     app.include_router(events_router, prefix="/api/events")
     app.include_router(needs_router, prefix="/api/me")
 
+
     @app.get("/healthz", include_in_schema=False)
     def healthz() -> dict[str, str]:
         try:
