@@ -1,12 +1,15 @@
-"""Business logic for BE-002 Event APIs and BE-003 Match calculation.
+"""Business logic for BE-002 Event APIs, BE-003 Match calculation, and
+BE-010 advanced search.
 
 Aligned to shared/API.md + shared/ARCHITECTURE.md:
   BE-API-004  GET  /api/events      — role-scoped list with filters
   BE-API-005  GET  /api/events/{id} — full detail with claim + organizer reliability
   BE-API-007  POST /api/events      — create event + inline venue + claim
+  BE-API-018  GET  /api/events (extended) — attribute/date filters, sort=match_score
 """
 
-from datetime import datetime, timezone
+from datetime import date, datetime, time, timezone
+from decimal import Decimal
 from uuid import uuid4
 
 from sqlalchemy import func, select
@@ -31,6 +34,16 @@ from app.modules.organizers.models import Organizer
 from app.modules.users.models import NeedProfile
 from app.modules.venues.models import Venue
 from app.modules.verification.models import Verification
+
+
+FACILITY_ATTRS = (
+    "step_free_entrance",
+    "elevator_or_ramp",
+    "accessible_restroom",
+    "accessible_seating",
+    "rest_area",
+    "parking_or_dropoff",
+)
 
 
 # ---------------------------------------------------------------------------
@@ -259,17 +272,49 @@ def list_events(
     limit: int = 20,
     offset: int = 0,
     mine: bool = False,
+    facility_filters: dict[str, Decimal] | None = None,
+    date_from: date | None = None,
+    date_to: date | None = None,
+    sort: str = "starts_at",
 ) -> EventListResponse:
     """
-    GET /api/events — BE-API-004.
+    GET /api/events — BE-API-004, extended by BE-API-018 (BE-010).
     Either role; organizer may use mine=true to filter their own events.
     Attendee using mine=true → 403.
-    Sort: starts_at ASC, then id ASC.
+
+    BE-010 additions:
+      - facility_filters: exact-match against stored Claim values (0/0.5/1).
+        A null claim never matches, per API.md's explicit rule.
+      - date_from/date_to: inclusive day-range on starts_at (UTC day bounds).
+      - sort="starts_at" (default, DB-level) or "match_score" (attendee-only,
+        requires a saved NeedProfile; computed in Python via _compute_match
+        since a score cannot be expressed as a SQL column).
     """
     if mine and user_role != "organizer":
         raise APIError(403, "FORBIDDEN", "mine=true hanya tersedia untuk organizer")
 
+    if sort == "match_score" and user_role != "attendee":
+        raise APIError(403, "FORBIDDEN", "sort=match_score hanya tersedia untuk attendee")
+
+    if date_from is not None and date_to is not None and date_from > date_to:
+        raise APIError(422, "VALIDATION_ERROR", "date_from harus sebelum atau sama dengan date_to")
+
+    profile: NeedProfile | None = None
+    if sort == "match_score":
+        profile = session.get(NeedProfile, user_id)
+        if profile is None:
+            raise APIError(
+                409,
+                "NEED_PROFILE_MISSING",
+                "Harap isi profil kebutuhan aksesibilitas terlebih dahulu",
+            )
+
     stmt = select(Event)
+
+    if facility_filters:
+        stmt = stmt.join(AccessibilityClaim, AccessibilityClaim.event_id == Event.id)
+        for attr, value in facility_filters.items():
+            stmt = stmt.where(getattr(AccessibilityClaim, attr) == value)
 
     if status is not None:
         stmt = stmt.where(Event.status == status)
@@ -287,18 +332,44 @@ def list_events(
         term = f"%{q[:100]}%"
         stmt = stmt.where(Event.title.ilike(term))
 
-    # Total count
-    count_stmt = select(func.count()).select_from(stmt.subquery())
-    total = session.scalar(count_stmt) or 0
+    if date_from is not None:
+        stmt = stmt.where(
+            Event.starts_at >= datetime.combine(date_from, time.min, tzinfo=timezone.utc)
+        )
+    if date_to is not None:
+        stmt = stmt.where(
+            Event.starts_at <= datetime.combine(date_to, time.max, tzinfo=timezone.utc)
+        )
 
-    # Paginated rows
-    rows = session.scalars(
-        stmt.order_by(Event.starts_at.asc(), Event.id.asc())
-        .limit(limit)
-        .offset(offset)
-    ).all()
+    if sort == "match_score":
+        # Score isn't a SQL column: fetch every filtered row first (small
+        # demo dataset), rank in Python, then slice for pagination.
+        assert profile is not None  # guaranteed by the guard clause above
+        all_rows = session.scalars(
+            stmt.order_by(Event.starts_at.asc(), Event.id.asc())
+        ).all()
+        total = len(all_rows)
 
-    items = [_build_list_item(row, session) for row in rows]
+        scored: list[tuple[int, Event]] = []
+        for event in all_rows:
+            claim = session.get(AccessibilityClaim, event.id)
+            score, *_ = _compute_match(profile, claim)
+            scored.append((score, event))
+
+        scored.sort(key=lambda pair: (-pair[0], pair[1].starts_at, pair[1].id))
+        page = scored[offset : offset + limit]
+        items = [_build_list_item(event, session) for _, event in page]
+    else:
+        count_stmt = select(func.count()).select_from(stmt.subquery())
+        total = session.scalar(count_stmt) or 0
+
+        rows = session.scalars(
+            stmt.order_by(Event.starts_at.asc(), Event.id.asc())
+            .limit(limit)
+            .offset(offset)
+        ).all()
+        items = [_build_list_item(row, session) for row in rows]
+
     return EventListResponse(items=items, total=total, limit=limit, offset=offset)
 
 
@@ -310,23 +381,20 @@ def get_event(event_id: str, session: Session) -> EventDetail:
     return _build_detail(event, session)
 
 
-def calculate_match(user_id: str, event_id: str, session: Session) -> MatchResponse:
-    profile = session.get(NeedProfile, user_id)
-    if profile is None:
-        raise APIError(
-            409,
-            "NEED_PROFILE_MISSING",
-            "Harap isi profil kebutuhan aksesibilitas terlebih dahulu",
-        )
+def _compute_match(
+    profile: NeedProfile, claim: AccessibilityClaim | None
+) -> tuple[int, list[MatchBreakdown], list[str], str]:
+    """
+    Pure scoring function shared by BE-API-006 (GET .../match) and BE-API-018
+    (sort=match_score). Do not duplicate this logic elsewhere — BE-API-018's
+    contract explicitly requires reusing this exact formula, not a separate
+    calculation, so the two endpoints can never silently drift apart.
 
-    event = session.get(Event, event_id)
-    if event is None:
-        raise APIError(404, "EVENT_NOT_FOUND", "Event tidak ditemukan")
-
-    claim = session.get(AccessibilityClaim, event_id)
-    if claim is None:
-        raise APIError(404, "CLAIM_NOT_FOUND", "Data aksesibilitas belum tersedia")
-
+    claim=None is treated as if every attribute were unknown (score 0 for
+    the numerator, weight still counted in the denominator) rather than
+    raising — list-sorting must never 500 on a data-integrity edge case
+    that a single-event lookup would reject outright.
+    """
     facility_attrs = [
         "step_free_entrance",
         "elevator_or_ramp",
@@ -344,7 +412,7 @@ def calculate_match(user_id: str, event_id: str, session: Session) -> MatchRespo
         is_required = getattr(profile, attr)
         coeff = 2.0 if is_required else 0.25
 
-        claim_val = getattr(claim, attr)
+        claim_val = getattr(claim, attr) if claim is not None else None
         if claim_val is None:
             fulfillment = None
             unknowns.append(attr)
@@ -378,7 +446,7 @@ def calculate_match(user_id: str, event_id: str, session: Session) -> MatchRespo
         coeff = 0.25
     total_coeff += coeff
 
-    claim_dist = claim.walking_distance_m
+    claim_dist = claim.walking_distance_m if claim is not None else None
     if claim_dist is None:
         fulfillment = None
         unknowns.append("walking_distance")
@@ -429,11 +497,33 @@ def calculate_match(user_id: str, event_id: str, session: Session) -> MatchRespo
     if unknowns:
         summary = "Some required information is unknown; contact the organizer."
 
+    return final_score, breakdowns, unknowns, summary
+
+
+def calculate_match(user_id: str, event_id: str, session: Session) -> MatchResponse:
+    profile = session.get(NeedProfile, user_id)
+    if profile is None:
+        raise APIError(
+            409,
+            "NEED_PROFILE_MISSING",
+            "Harap isi profil kebutuhan aksesibilitas terlebih dahulu",
+        )
+
+    event = session.get(Event, event_id)
+    if event is None:
+        raise APIError(404, "EVENT_NOT_FOUND", "Event tidak ditemukan")
+
+    claim = session.get(AccessibilityClaim, event_id)
+    if claim is None:
+        raise APIError(404, "CLAIM_NOT_FOUND", "Data aksesibilitas belum tersedia")
+
+    score, breakdown, unknowns, summary = _compute_match(profile, claim)
+
     return MatchResponse(
         event_id=event_id,
-        score=final_score,
+        score=score,
         weight_version="provisional-v1",
-        breakdown=breakdowns,
+        breakdown=breakdown,
         unknown_attributes=unknowns,
         summary=summary,
     )
