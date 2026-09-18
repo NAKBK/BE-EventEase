@@ -153,6 +153,14 @@ def create_event(payload: EventCreate, user_id: str, session: Session) -> EventD
     organizer = _require_organizer_by_user(user_id, session)
     now = datetime.now(timezone.utc)
 
+    # Ensure payload timestamps are timezone-aware (should be validated in schema)
+    if payload.starts_at.tzinfo is None or payload.ends_at.tzinfo is None:
+        raise APIError(
+            422, 
+            "VALIDATION_ERROR", 
+            "starts_at dan ends_at harus memiliki informasi timezone (format ISO 8601)"
+        )
+
     # Derive status from timestamps
     status = "upcoming" if payload.starts_at > now else "completed"
 
