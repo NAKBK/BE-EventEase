@@ -23,7 +23,7 @@ def utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
-def _map_request_response(req: AccessibilityRequest) -> RequestResponse:
+def map_request_response(req: AccessibilityRequest) -> RequestResponse:
     resp = None
     if req.response_decision is not None:
         resp = OrganizerResponseDetails(
@@ -90,7 +90,7 @@ def create_request(
     )
     session.add(new_req)
     session.commit()
-    return _map_request_response(new_req)
+    return map_request_response(new_req)
 
 
 def list_requests(
@@ -119,7 +119,7 @@ def list_requests(
 
     items = []
     for req, evt in results:
-        base = _map_request_response(req).model_dump()
+        base = map_request_response(req).model_dump()
         base["event_title"] = evt.title
         items.append(RequestItem(**base))
 
@@ -155,7 +155,7 @@ def respond_to_request(
     req.status = "closed" if payload.decision == "cannot_fulfill" else "responded"
 
     session.commit()
-    return _map_request_response(req)
+    return map_request_response(req)
 
 
 def confirm_response(
@@ -178,4 +178,4 @@ def confirm_response(
         req.status = "closed"
 
     session.commit()
-    return _map_request_response(req)
+    return map_request_response(req)

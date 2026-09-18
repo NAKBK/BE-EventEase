@@ -30,8 +30,11 @@ app/
 │   ├── events/           # Event, AccessibilityClaim, EventMedia + matching
 │   │                     # (_compute_match) + list/detail/create + media upload
 │   ├── accessibility_requests/  # Request state machine (BE-API-008..011)
-│   └── verification/     # Post-event verification (BE-API-012), calls into
-│                         # organizers.service for the reliability recompute
+│   ├── verification/     # Post-event verification (BE-API-012), calls into
+│   │                     # organizers.service for the reliability recompute
+│   └── dashboard/         # Attendee dashboard summary (BE-API-019) — pure
+│                         # composition over accessibility_requests/events,
+│                         # no scoring or request-mapping logic of its own
 ├── models.py             # re-exports every ORM class so Alembic autogenerate sees
 │                         # the full metadata graph regardless of import order
 ├── seed.py               # idempotent demo fixtures (safe to call twice)
@@ -45,7 +48,7 @@ app/
 | --- | --- |
 | `/api/auth` | `auth` |
 | `/api/events` | `events`, and `media` if `python-multipart` is importable |
-| `/api/me` | `users` (needs) |
+| `/api/me` | `users` (needs), `dashboard` |
 | `/api` | `accessibility_requests` (`/requests`, `/events/{id}/requests`) |
 | `/api/organizers` | `organizers` |
 | `/api` | `verification` (`/requests/{id}/verification`) |
@@ -118,7 +121,10 @@ documented weighted-sum formula over the seven accessibility attributes. It
 is called from two places — `GET /api/events/{id}/match` (BE-API-006) and the
 `sort=match_score` branch of `GET /api/events` (BE-API-018) — so list ordering and the
 detail score can never drift apart; see `tests/test_be010.py::test_sort_by_match_score_orders_events_and_reuses_match_formula`,
-which specifically regression-tests that the two call sites agree.
+which specifically regression-tests that the two call sites agree. The dashboard
+(BE-API-019) adds a third caller of `calculate_match` (the function wrapping
+`_compute_match`), not a fourth path into `_compute_match` itself; see
+`tests/test_be011.py::test_dashboard_active_event_matches_direct_match_endpoint`.
 
 ## Reliability (BE-005)
 

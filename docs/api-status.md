@@ -4,7 +4,7 @@ This table is the audit trail for every endpoint this backend exposes: what exis
 where the code lives, and what test covers it. Re-check this table whenever an
 endpoint's implementation changes.
 
-Last verified: 2026-09-18, against `50 passed` on the full `pytest` suite.
+Last verified: 2026-09-18, against `57 passed` on the full `pytest` suite.
 
 | ID | Endpoint | Task | Status | Code | Tests |
 | --- | --- | --- | --- | --- | --- |
@@ -27,7 +27,7 @@ Last verified: 2026-09-18, against `50 passed` on the full `pytest` suite.
 | BE-API-017 | `POST /api/events/{id}/media` | BE-009 | Done | `app/modules/events/media_controller.py` | `tests/test_be009.py` |
 | BE-API-018 | `GET /api/events` (extended filters/sort) | BE-010 | Done | `app/modules/events/controller.py`/`service.py` (shares BE-API-004's handler) | `tests/test_be010.py` |
 | — (extension) | Venue `lat`/`lng` on venue embeds | BE-002 | Done | `app/modules/events/service.py::_build_venue_embed`, `app/modules/venues/models.py` | `tests/test_be002.py` |
-| BE-API-019 | `GET /api/me/dashboard` | BE-011 | **Planned** — attendee dashboard summary endpoint, not yet implemented | none yet | none yet |
+| BE-API-019 | `GET /api/me/dashboard` | BE-011 | Done | `app/modules/dashboard/controller.py`, `service.py` (composes `accessibility_requests`/`events` services only, no new business logic) | `tests/test_be011.py` |
 
 ## What "Done" means here
 

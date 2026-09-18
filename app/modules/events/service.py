@@ -122,7 +122,7 @@ def _build_detail(event: Event, session: Session) -> EventDetail:
     )
 
 
-def _build_list_item(event: Event, session: Session) -> EventListItem:
+def build_event_list_item(event: Event, session: Session) -> EventListItem:
     venue = session.get(Venue, event.venue_id)
     if venue is None:
         raise APIError(500, "DATA_INTEGRITY_ERROR", f"Venue untuk event '{event.id}' tidak ditemukan")
@@ -301,7 +301,7 @@ def list_events(
 
         scored.sort(key=lambda pair: (-pair[0], pair[1].starts_at, pair[1].id))
         page = scored[offset : offset + limit]
-        items = [_build_list_item(event, session) for _, event in page]
+        items = [build_event_list_item(event, session) for _, event in page]
     else:
         count_stmt = select(func.count()).select_from(stmt.subquery())
         total = session.scalar(count_stmt) or 0
@@ -311,7 +311,7 @@ def list_events(
             .limit(limit)
             .offset(offset)
         ).all()
-        items = [_build_list_item(row, session) for row in rows]
+        items = [build_event_list_item(row, session) for row in rows]
 
     return EventListResponse(items=items, total=total, limit=limit, offset=offset)
 
