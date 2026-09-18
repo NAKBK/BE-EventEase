@@ -1,6 +1,6 @@
 <div align="center">
 
-# EventEase — Backend API Service
+# EventEase - Backend API Service
 
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.141.1-009688.svg?style=flat&logo=FastAPI)](https://fastapi.tiangolo.com/)
 [![Python](https://img.shields.io/badge/Python-3.12-3776AB.svg?style=flat&logo=Python)](https://www.python.org/)
@@ -8,7 +8,7 @@
 [![SQLAlchemy](https://img.shields.io/badge/SQLAlchemy-2.0-D71F00.svg?style=flat&logo=SQLAlchemy)](https://www.sqlalchemy.org/)
 
 <p align="center">
-  EventEase is an inclusive platform that empowers individuals with mobility access needs—such as wheelchair users, crutch users, seniors, pregnant people, and stroller users—to make confident, informed decisions when attending public events.
+  EventEase is an inclusive platform that empowers individuals with mobility access needs - such as wheelchair users, crutch users, seniors, pregnant people, and stroller users - to make confident, informed decisions when attending public events.
 </p>
 
 </div>
@@ -49,7 +49,7 @@ EventEase solves this gap by bridging personalized attendee needs with organizer
 
 ## Key Justification
 
-Short version of decisions a reviewer might otherwise question — full reasoning
+Short version of decisions a reviewer might otherwise question - full reasoning
 (context, alternatives rejected, consequences) lives in [`docs/adr/`](docs/adr/).
 
 - **FastAPI modular monolith, not microservices.** The domains (needs, events,
@@ -63,18 +63,23 @@ Short version of decisions a reviewer might otherwise question — full reasonin
   See [ADR-0002](docs/adr/0002-dual-auth-demo-and-real.md).
 - **The match score is a documented, versioned formula (`weight_version`), not a
   black box.** No real AHP weights exist yet, so the coefficients are explicitly
-  labeled provisional and every response returns all seven breakdown rows —
-  including unknown ones — instead of hiding what wasn't claimed.
+  labeled provisional and every response returns all seven breakdown rows -
+  including unknown ones - instead of hiding what wasn't claimed.
   See [ADR-0003](docs/adr/0003-provisional-weighted-match-formula.md).
 - **Reliability is scored per-organizer, never per-venue or per-event.** The claim
   being verified is an organizational promise ("we'll staff the ramp"), not a fact
-  about the building — a venue has no accountable, logged-in owner to attach a
+  about the building - a venue has no accountable, logged-in owner to attach a
   trust score to, and organizers reuse venues across events. Missing or incomplete
   venue data therefore has zero effect on this score, by construction.
   See [ADR-0004](docs/adr/0004-reliability-scoped-to-organizer.md).
 - **Claim evidence photos live in Supabase Storage, never as bytes in Postgres or
   in a JSON body.** The API only ever returns a fetchable URL.
   See [ADR-0005](docs/adr/0005-supabase-storage-for-media.md).
+- **The match score uses Simple Additive Weighting (SAW), not a machine-learning
+  model.** There is no real outcome dataset yet to train one on; SAW needs zero
+  training data and stays fully explainable per attribute. Migrating to a learned
+  model is a documented roadmap, gated on data volume, not a calendar date.
+  See [ADR-0006](docs/adr/0006-saw-scoring-not-ml.md).
 
 ## Quick Start Guide
 
@@ -137,13 +142,13 @@ Run the automated integration test suite to verify migrations, seeding, and demo
 pytest -v
 ```
 
-50 tests as of this writing, one file per backend task (`tests/test_be00N.py`), run
-against a fresh SQLite database per test — no shared state, no dependency on a
+57 tests as of this writing, one file per backend task (`tests/test_be00N.py`), run
+against a fresh SQLite database per test, no shared state, no dependency on a
 running Postgres/Supabase instance.
 
 ## Demo / Test Flow
 
-The full product journey — Need → Match → Commit → Verify — walked through as
+The full product journey - Need → Match → Commit → Verify - walked through as
 literal `curl` calls against the seeded demo data (login as both roles, save a
 need profile, browse a personalized match score, send and answer an accessibility
 request, confirm it, optionally attach evidence, then verify a completed seeded
@@ -167,7 +172,8 @@ BE-EventEase/
 │   │   ├── venues/            # Venue Model (embedded via events; no own routes)
 │   │   ├── events/            # Events & 7-Attribute Accessibility Claims
 │   │   ├── accessibility_requests/ # Accommodation Commitments Lifecycle
-│   │   └── verification/      # Post-event Attendee Verification
+│   │   ├── verification/      # Post-event Attendee Verification
+│   │   └── dashboard/         # Attendee Dashboard Summary (BE-API-019)
 │   ├── seed.py                # Idempotent Seed Fixtures
 │   ├── cli.py                 # CLI Seed Command
 │   └── main.py                # FastAPI App Initialization & Router Setup

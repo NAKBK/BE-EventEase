@@ -36,7 +36,7 @@ curl -s -X PUT localhost:8000/api/me/needs -H "Authorization: Bearer $ATT_TOKEN"
 ```
 
 This is a prerequisite for both `sort=match_score` (BE-API-018) and
-`GET /events/{id}/match` (BE-API-006) — both return 409 `NEED_PROFILE_MISSING`
+`GET /events/{id}/match` (BE-API-006) - both return 409 `NEED_PROFILE_MISSING`
 without a saved profile.
 
 ## 3. Browse events with a personalized score
@@ -47,7 +47,7 @@ curl -s localhost:8000/api/events/evt-upcoming-1/match -H "Authorization: Bearer
 ```
 
 The second call returns the full seven-attribute breakdown (`fulfillment`,
-`weight`, `label`) — this is what should be rendered as the "why this score"
+`weight`, `label`) - this is what should be rendered as the "why this score"
 explanation, per the product rule that a score is never shown without its
 breakdown and unknowns.
 
@@ -64,7 +64,7 @@ REQUEST_ID=$(jq -r .id request.json)
 ```
 
 Trying to submit a second active request for the same event now returns 409
-`ACTIVE_REQUEST_EXISTS` — see `tests/test_be004.py`.
+`ACTIVE_REQUEST_EXISTS` - see `tests/test_be004.py`.
 
 ## 5. Organizer responds
 
@@ -76,7 +76,7 @@ curl -s -X POST localhost:8000/api/requests/$REQUEST_ID/response \
   }'
 ```
 
-`decision: cannot_fulfill` would instead move the request straight to `closed` — no
+`decision: cannot_fulfill` would instead move the request straight to `closed` - no
 attendee confirmation step follows a rejection.
 
 ## 6. Attendee confirms
@@ -88,7 +88,7 @@ curl -s -X POST localhost:8000/api/requests/$REQUEST_ID/confirm \
 ```
 
 Request is now `confirmed`. Both attendee (`GET /api/requests`) and organizer see the
-identical saved state and note — nothing here is private to one side.
+identical saved state and note - nothing here is private to one side.
 
 ## 7. Organizer attaches evidence (optional, BE-009)
 
@@ -98,14 +98,14 @@ curl -s -X POST localhost:8000/api/events/evt-upcoming-1/media \
   -F "file=@ramp-photo.jpg;type=image/jpeg"
 ```
 
-Requires `SUPABASE_URL`/`SUPABASE_SERVICE_ROLE_KEY` configured — see
+Requires `SUPABASE_URL`/`SUPABASE_SERVICE_ROLE_KEY` configured - see
 `docs/playbook.md#media-uploads`. Shows up immediately in
 `GET /api/events/evt-upcoming-1`'s `media` array.
 
 ## 8. Post-event verification (uses the seeded *past* event)
 
 The demo seed already has a `confirmed` request (`req-past-1`) against
-`evt-past-1`, which is seeded `completed` and in the past — so this step doesn't
+`evt-past-1`, which is seeded `completed` and in the past - so this step doesn't
 need steps 4-6 repeated:
 
 ```bash
@@ -123,19 +123,32 @@ curl -s -X POST localhost:8000/api/requests/req-past-1/verification \
   }'
 ```
 
-The response includes `organizer_reliability` computed fresh — compare it against:
+The response includes `organizer_reliability` computed fresh - compare it against:
 
 ```bash
 curl -s localhost:8000/api/organizers/org-1 -H "Authorization: Bearer $ATT_TOKEN"
 ```
 
 Trying to verify `evt-upcoming-1`'s request instead fails with 409
-`EVENT_NOT_COMPLETED` — the event hasn't happened yet. Trying to verify the same
+`EVENT_NOT_COMPLETED` - the event hasn't happened yet. Trying to verify the same
 request twice fails with 409 `ALREADY_VERIFIED`.
+
+## 9. Attendee dashboard summary (optional convenience call)
+
+```bash
+curl -s localhost:8000/api/me/dashboard -H "Authorization: Bearer $ATT_TOKEN"
+```
+
+One call instead of three: `pending_requests_count` (from step 4/5), `active_event`
+(populated once step 6 confirms a request against `evt-upcoming-1`, with a `match`
+object that is bit-for-bit identical to calling step 3's match endpoint directly for
+that event), and `recent_requests` (the same items `GET /api/requests` returns,
+newest first, capped at 5). `req-past-1` from step 8 never appears as `active_event`
+since its event is `completed`, only in `recent_requests`.
 
 ## Automated equivalent
 
-Every step above has a corresponding assertion in the test suite — this walkthrough
+Every step above has a corresponding assertion in the test suite - this walkthrough
 has no logic the tests don't already cover, it's just the same paths in a form you
 can read out loud during a demo:
 
@@ -149,5 +162,6 @@ can read out loud during a demo:
 | 6 | `tests/test_be004.py::test_create_and_list_requests` |
 | 7 | `tests/test_be009.py` |
 | 8 | `tests/test_be005.py::test_submit_verification_updates_reliability` |
+| 9 | `tests/test_be011.py::test_dashboard_active_event_matches_direct_match_endpoint` |
 
 Run the whole thing with `pytest -v` (see `docs/playbook.md#testing`).
