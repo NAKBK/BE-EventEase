@@ -172,13 +172,13 @@ class ClaimInput(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    step_free_entrance: FacilityScore = None
-    elevator_or_ramp: FacilityScore = None
-    accessible_restroom: FacilityScore = None
-    accessible_seating: FacilityScore = None
-    rest_area: FacilityScore = None
-    parking_or_dropoff: FacilityScore = None
-    walking_distance_m: int | None = Field(default=None, ge=0)
+    step_free_entrance: FacilityScore
+    elevator_or_ramp: FacilityScore
+    accessible_restroom: FacilityScore
+    accessible_seating: FacilityScore
+    rest_area: FacilityScore
+    parking_or_dropoff: FacilityScore
+    walking_distance_m: int | None = Field(ge=0)
 
 
 # ---------------------------------------------------------------------------

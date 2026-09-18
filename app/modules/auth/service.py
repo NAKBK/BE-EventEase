@@ -7,6 +7,7 @@ from app.core.config import get_settings
 from app.core.errors import APIError
 from app.core.security import create_access_token, hash_password, verify_password
 from app.modules.auth.schemas import LoginRequest, RegisterRequest, TokenResponse, UserResponse
+from app.modules.organizers.models import Organizer
 from app.modules.users.models import User
 
 
@@ -40,6 +41,13 @@ def register_user(payload: RegisterRequest, session: Session) -> TokenResponse:
         password_hash=hash_password(payload.password),
     )
     session.add(user)
+    session.flush()  # write user so organizers.owner_user_id FK resolves
+
+    if payload.role == "organizer":
+        session.add(
+            Organizer(id=str(uuid.uuid4()), owner_user_id=user.id, name=payload.name)
+        )
+
     session.commit()
 
     return TokenResponse(
